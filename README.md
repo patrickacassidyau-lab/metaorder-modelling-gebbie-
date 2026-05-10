@@ -1,16 +1,34 @@
 # Metaorder signal (LMF-structured)
 
-Python implementation of the structural metaorder pipeline described in `docs/metaorder_signal.tex`: volatility estimators (range, Parkinson, Yang-Zhang), Clauset-style power-law fitting via `powerlaw`, synthetic-trader sensitivity for \(N\), composite stylised-fact loss, tick-level signal algebra, and an event-driven backtest with square-root impact costs and theory-style capacity \(q < 10^{-4} V_D\).
+Python implementation of the structural metaorder pipeline described in `docs/metaorder_signal.tex`: volatility estimators (range, Parkinson, Yang-Zhang), Clauset-style power-law fitting via `powerlaw`, synthetic-trader sensitivity for \(N\), composite stylised-fact loss, tick-level signal algebra, and an event-driven backtest with square-root impact costs and theory-style capacity \(q < 10^{-4} V_D\) implemented as `BacktestConfig.capacity_frac` (default \(10^{-4}\)) times calibrated \(V_D\).
 
 Notation follows Goliath & Gebbie, *Metaorder modelling and identification from public data* ([arXiv:2602.19590](https://arxiv.org/abs/2602.19590)).
 
 ---
 
-## Empirical study at a glance
+## Stats
 
 Public Binance aggregate trades, chronological calibration / validation / test splits, structural fit on calibration only, hyperparameter grid search on validation, single evaluation on test, cost stress on test, figures under `notebooks/` produced by `notebooks/metaorder_tuning_report.ipynb`.
 
 Pipeline: calibration tape, structural parameters, grid search on signal and execution settings using validation only, one scoring pass on test, spread multipliers on the winner for a friction check, JSON summary at `notebooks/tuning_summary.json`.
+
+### Reviewer checkpoints
+
+These are the usual objections a desk quant raises; answers are spelled out here so nobody has to hunt.
+
+1. Sharpe-like is not annualised and is weak as a headline. In `compute_metrics`, `sharpe_like` is \(\mu / \sigma\) of successive differences of the cumulative `equity` series, multiplied by \(\sqrt{T}\) for \(T\) tick steps (see `metrics._sharpe_like`). That is a signal-to-noise ratio on equity increments along the agg-trade clock, not calendar time and not comparable to “1.0 annualised Sharpe” without rewriting the scaling using clock time per step and trades per year. The reported 0.62 to 0.68 on the sample snapshot should be read as faint edge on that diagnostic, not as a volatility-targeted Sharpe eligible for allocator conversation. Proper next step is reporting PnL per unit risk with explicit horizon and gross and net of all fees, or relocating to bars and annualising honestly.
+
+2. Spearman IC (survival vs forward log-mid return, horizon 5 ticks in `compute_metrics`) turning negative on test while positive on validation is the main substantive failure mode in the checked-in snapshot. Treat that as prima facie loss of directional association out of sample until shown otherwise: candidate causes include grid-induced overfitting on validation, unstable survival estimates on thin segments, calibration drift (\(\hat\alpha\), \(V_D\), \(\sigma_D\)) versus the test regime, short tape length, or pure noise. Correct response is investigation (longer tape, nested cross-validation within calibration/val only, permutation tests on labels, tighter priors or smaller grids), not treating “many panels” as a substitute conclusion.
+
+3. Grid multiplicity: the `fine` preset evaluates 128 Cartesian product combinations over six knobs (`p_min`, `phi_entry`, `rho_max`, `n_min`, `half_spread`, `kappa`; `phi_exit` fixed). See `metaorder_signal.empirical.tuning` and `grid_preset_size`. Picking validation maxima over even 128 draws still injects optimism; leaderboard bars that line up tightly can mean identical effective strategies or test insensitivity as much as “robustness.” Walk-forward grids, Bayesian shrinkage, or reporting penalised objectives would be more defensible than a single rectangular search.
+
+4. Asset class mismatch: the Gebbie-linked paper speaks to equities and order flow narratives that do not port one-to-one to BTCUSDT aggregates (24/7 tape, maker/taker ecology, fragmentation, staleness versus L3). Crypto here is chosen for reproducibility and public data, not as a replication claim. Prefer listed equity TAQ plus venue-specific simulator when pitching microstructure fidelity.
+
+5. Interpretation of cumulative `equity`. `run_event_backtest` increments `cash` by `position * (mid_exit - mid_entry)` on exits and subtracts fractional spread and \(\kappa \sigma_D \sqrt{|q|/V_D}\) style costs (`backtest.py`). Position size is clipped to `capacity_frac * vd` (default \(\pm 10^{-4} V_D\) in base currency units alongside `mid`). With few entries and tight capacity, cumulative cash ends small in magnitude in USDT-equivalent notionals; it is still interpretable cumulative mark-to-market plus costs, not a broken normaliser. If recruiters want intuitive scale, multiply by a notional or relax `capacity_frac` and report turnover.
+
+6. Repository shape. A clean tree, `pyproject.toml`, tests, and a notebook can reflect tooling or a template. Anyone asked in interview should be able to open `empirical/tuning.py`, `empirical/metrics.py`, and `backtest.py` and explain line by line what is fitted where and what is held out.
+
+7. Theory capacity clip. The \(10^{-4} V_D\) rule is a hard coded research bound in `BacktestConfig`. It caps how much `q` can move PnL per trade and indirectly sets the scale of `equity`. It is not fitted to liquidity on Binance. Sensitivity to `capacity_frac` belongs in the same class as spread stress.
 
 ```mermaid
 flowchart LR
@@ -42,7 +60,7 @@ Calibration (structure), validation (search), test (single forward run, no refit
 
 ![Split timeline](notebooks/fig_split_timeline.png)
 
-### 2. Validation hyperparameter surface
+### 2. Hyperparameter surface (validation)
 
 Left: maximum validation score over the rest of the grid for each \((p_{\min}, \phi_{\text{entry}})\) pair. Right: same pairs with other parameters fixed to the selected configuration.
 
@@ -56,13 +74,13 @@ Histogram of validation final equity across all grid points; vertical line at th
 
 ### 4. Leaderboard: validation vs test
 
-Top configurations by validation equity, each replayed on test without further tuning. Bar gaps flag regime shift or selection effects.
+Top configurations by validation equity, each replayed on test without further tuning.
 
 ![Leaderboard validation vs test](notebooks/fig_leaderboard_val_test.png)
 
 ### 5. Strategy vs buy-and-hold and drawdown
 
-Upper row: strategy cumulative cash proxy vs BTC buy-and-hold return on the same mid path (twin axes, different units). Lower row: underwater drawdown of the strategy equity path.
+Upper row: strategy cumulative cash vs BTC buy-and-hold return on the same mid path (twin axes, different units). Lower row: underwater drawdown of the strategy equity path.
 
 ![Equity benchmark and drawdown](notebooks/fig_equity_benchmark_dd.png)
 
@@ -82,10 +100,10 @@ Half-spread multipliers applied on test only to the winning configuration. Styli
 
 ### Snapshot metrics (`notebooks/tuning_summary.json`)
 
-Values update whenever you refetch data or change `MAX_TRADES`. Table below matches the JSON checked into `notebooks/` at this revision.
+Values update when you refetch data or edit `MAX_TRADES`. The Sharpe-like column is tick-step based per section 1 above, not annualised.
 
-| Segment | Final equity | Sharpe-like (steps) | Max DD (scale-norm.) |
-|---------|--------------|---------------------|------------------------|
+| Segment | Final equity | Sharpe-like (tick steps, not annualised) | Max DD (scale-norm.) |
+|---------|--------------|------------------------------------------|----------------------|
 | Validation | 0.00146 | 0.68 | 0.80 |
 | Test | 0.00186 | 0.62 | 0.30 |
 
@@ -93,25 +111,13 @@ Example winning parameters: `p_min=0.56`, `phi_entry=0.48`, `rho_max=2.2`, `n_mi
 
 Spread stress on test (same snapshot): ×1.0 → 0.00186; ×1.25 → 0.00158; ×1.5 → 0.00131; ×2.0 → 0.00076; ×2.5 → 0.00021.
 
-Spearman IC (survival vs forward log-mid return) was positive on validation and negative on test in this run, so the report spreads metrics across panels instead of a single headline.
+IC snapshot: validation Spearman IC for survival versus forward returns was \(+0.087\); test was \(-0.096\) (five-tick horizon in metric code). Interpret together with reviewer point 2; it is incompatible with claiming stable predictive validity on this split.
 
-### What the run shows
-
-Structural parameters are estimated on calibration only. Hyperparameters are chosen using validation. Test is one forward evaluation. Leaderboard, benchmark, drawdowns, and spread stress are there to surface failure modes rather than a single equity print.
-
-Equity levels are small on the internal cash scale; use them for relative comparison across configurations, not dollar PnL.
-
-### Scope and limits
-
-Data are public crypto aggregate trades, not equity L2. Costs use half-spread and square-root impact as stylised rules; production would add queueing, latency, partial fills, borrow, funding, venue fees.
-
-A finite grid and multiple plots imply selection pressure; a held-out test segment reduces leakage but does not prove tradable edge.
-
-The capacity bound follows the theory-style clip in code; it is not a live capacity estimate.
+Grid count for tuning notebook preset `fine`: 128 evaluations on validation (`grid_preset_size("fine")`).
 
 ### Possible extensions
 
-Walk-forward or rolling recalibration with stability tables for \(\hat{\alpha}\), \(V_D\), \(\sigma_D\). Block permutations or shuffles for null distributions of test statistics. Turnover and average spread paid per signal; stress tests in basis points per trade. Always-flat and random-entry baselines under identical cost rules.
+Walk-forward or rolling recalibration with stability tables for \(\hat{\alpha}\), \(V_D\), \(\sigma_D\). Block permutations or shuffles for null distributions of test IC and equity. Turnover and average spread paid per signal; capacity_frac sweeps parallel to spread stress. Always-flat and random-entry baselines under identical costs. Equity L2 replicate on equities when licensing allows.
 
 ---
 
@@ -155,7 +161,7 @@ Hold-out evaluation without using the test segment when fitting structure:
 
 1. Time split: earlier trades for calibration, later for evaluation (`experiments/run_empirical_study.py`).
 2. Calibration: same-sign run lengths, Clauset `powerlaw` tail \(\hat{\alpha}\); \(V_D\) is total traded quantity in calibration; \(\sigma_D\) is std of consecutive log-mid returns.
-3. Hold-out: freeze `MetaorderSignalParams`, run `run_event_backtest`, emit JSON (final equity, Sharpe-like on equity steps, scale-normalised max drawdown, entries, Spearman IC between survival and forward log-mid returns).
+3. Hold-out: freeze `MetaorderSignalParams`, run `run_event_backtest`, emit JSON (final equity, Sharpe-like on equity steps with the caveats above, scale-normalised max drawdown, entries, Spearman IC between survival and forward log-mid returns).
 4. Data: your CSV or `--fetch-binance BTCUSDT` for public aggregate trades (spot, no API key).
 
 ```bash
