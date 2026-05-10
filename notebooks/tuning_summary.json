@@ -1,0 +1,196 @@
+{
+  "grid_preset": "fine",
+  "n_tape_rows": 1002,
+  "best_config": {
+    "p_min": 0.56,
+    "phi_entry": 0.48,
+    "rho_max": 2.2,
+    "n_min": 2,
+    "phi_exit": 0.88,
+    "half_spread": 0.0001,
+    "kappa": 0.006,
+    "s_max": 8000.0
+  },
+  "validation_metrics": {
+    "final_equity": 0.0014551665599479451,
+    "mean_equity_step": 4.8505551998264835e-06,
+    "vol_equity_step": 0.00012423106500311987,
+    "sharpe_like": 0.6762727221895659,
+    "max_drawdown": 0.8011521198929149,
+    "n_trades_signal": 300,
+    "n_entries": 15,
+    "ic_survival_fwd_ret": 0.08664852720488965,
+    "baseline_final_equity": null
+  },
+  "test_metrics": {
+    "final_equity": 0.0018551707839645883,
+    "sharpe_like": 0.6239712555768686,
+    "n_entries": 11,
+    "max_drawdown": 0.29996429051073764,
+    "ic": -0.09628467305233897
+  },
+  "leaderboard": [
+    {
+      "rank": 1,
+      "p_min": 0.56,
+      "phi_entry": 0.48,
+      "rho_max": 2.2,
+      "n_min": 2.0,
+      "phi_exit": 0.88,
+      "half_spread": 0.0001,
+      "kappa": 0.006,
+      "val_final_equity": 0.0014551665599479451,
+      "test_final_equity": 0.0018551707839645883,
+      "test_sharpe_like": 0.6239712555768686,
+      "test_max_dd": 0.29996429051073764
+    },
+    {
+      "rank": 2,
+      "p_min": 0.56,
+      "phi_entry": 0.64,
+      "rho_max": 3.0,
+      "n_min": 2.0,
+      "phi_exit": 0.88,
+      "half_spread": 0.0001,
+      "kappa": 0.006,
+      "val_final_equity": 0.0014551665599479451,
+      "test_final_equity": 0.0018551707839645883,
+      "test_sharpe_like": 0.6239712555768686,
+      "test_max_dd": 0.29996429051073764
+    },
+    {
+      "rank": 3,
+      "p_min": 0.64,
+      "phi_entry": 0.48,
+      "rho_max": 3.0,
+      "n_min": 2.0,
+      "phi_exit": 0.88,
+      "half_spread": 0.0001,
+      "kappa": 0.006,
+      "val_final_equity": 0.0014551665599479451,
+      "test_final_equity": 0.0018551707839645883,
+      "test_sharpe_like": 0.6239712555768686,
+      "test_max_dd": 0.29996429051073764
+    },
+    {
+      "rank": 4,
+      "p_min": 0.64,
+      "phi_entry": 0.48,
+      "rho_max": 2.2,
+      "n_min": 2.0,
+      "phi_exit": 0.88,
+      "half_spread": 0.0001,
+      "kappa": 0.006,
+      "val_final_equity": 0.0014551665599479451,
+      "test_final_equity": 0.0018551707839645883,
+      "test_sharpe_like": 0.6239712555768686,
+      "test_max_dd": 0.29996429051073764
+    },
+    {
+      "rank": 5,
+      "p_min": 0.64,
+      "phi_entry": 0.56,
+      "rho_max": 3.0,
+      "n_min": 2.0,
+      "phi_exit": 0.88,
+      "half_spread": 0.0001,
+      "kappa": 0.006,
+      "val_final_equity": 0.0014551665599479451,
+      "test_final_equity": 0.0018551707839645883,
+      "test_sharpe_like": 0.6239712555768686,
+      "test_max_dd": 0.29996429051073764
+    },
+    {
+      "rank": 6,
+      "p_min": 0.56,
+      "phi_entry": 0.56,
+      "rho_max": 3.0,
+      "n_min": 2.0,
+      "phi_exit": 0.88,
+      "half_spread": 0.0001,
+      "kappa": 0.006,
+      "val_final_equity": 0.0014551665599479451,
+      "test_final_equity": 0.0018551707839645883,
+      "test_sharpe_like": 0.6239712555768686,
+      "test_max_dd": 0.29996429051073764
+    },
+    {
+      "rank": 7,
+      "p_min": 0.56,
+      "phi_entry": 0.72,
+      "rho_max": 3.0,
+      "n_min": 2.0,
+      "phi_exit": 0.88,
+      "half_spread": 0.0001,
+      "kappa": 0.006,
+      "val_final_equity": 0.0014551665599479451,
+      "test_final_equity": 0.0018551707839645883,
+      "test_sharpe_like": 0.6239712555768686,
+      "test_max_dd": 0.29996429051073764
+    },
+    {
+      "rank": 8,
+      "p_min": 0.64,
+      "phi_entry": 0.64,
+      "rho_max": 2.2,
+      "n_min": 2.0,
+      "phi_exit": 0.88,
+      "half_spread": 0.0001,
+      "kappa": 0.006,
+      "val_final_equity": 0.0014551665599479451,
+      "test_final_equity": 0.0018551707839645883,
+      "test_sharpe_like": 0.6239712555768686,
+      "test_max_dd": 0.29996429051073764
+    },
+    {
+      "rank": 9,
+      "p_min": 0.56,
+      "phi_entry": 0.72,
+      "rho_max": 2.2,
+      "n_min": 2.0,
+      "phi_exit": 0.88,
+      "half_spread": 0.0001,
+      "kappa": 0.006,
+      "val_final_equity": 0.0014551665599479451,
+      "test_final_equity": 0.0018551707839645883,
+      "test_sharpe_like": 0.6239712555768686,
+      "test_max_dd": 0.29996429051073764
+    },
+    {
+      "rank": 10,
+      "p_min": 0.64,
+      "phi_entry": 0.64,
+      "rho_max": 3.0,
+      "n_min": 2.0,
+      "phi_exit": 0.88,
+      "half_spread": 0.0001,
+      "kappa": 0.006,
+      "val_final_equity": 0.0014551665599479451,
+      "test_final_equity": 0.0018551707839645883,
+      "test_sharpe_like": 0.6239712555768686,
+      "test_max_dd": 0.29996429051073764
+    }
+  ],
+  "spread_stress_on_test": [
+    {
+      "spread_mult": 1.0,
+      "test_final_equity": 0.0018551707839645883
+    },
+    {
+      "spread_mult": 1.25,
+      "test_final_equity": 0.0015801707839645865
+    },
+    {
+      "spread_mult": 1.5,
+      "test_final_equity": 0.001305170783964586
+    },
+    {
+      "spread_mult": 2.0,
+      "test_final_equity": 0.0007551707839645874
+    },
+    {
+      "spread_mult": 2.5,
+      "test_final_equity": 0.00020517078396458703
+    }
+  ]
+}
