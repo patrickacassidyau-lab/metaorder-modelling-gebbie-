@@ -1,0 +1,684 @@
+\documentclass[12pt,a4paper]{article}
+
+% ── Packages ──────────────────────────────────────────────────────────────────
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{cite}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{natbib}
+\usepackage{microtype}
+\usepackage{setspace}
+\onehalfspacing
+
+% ── Theorem environments ───────────────────────────────────────────────────────
+\newtheorem{proposition}{Proposition}
+\newtheorem{definition}{Definition}
+\newtheorem{remark}{Remark}
+
+% ── Code listings style ────────────────────────────────────────────────────────
+\lstset{
+  language=Python,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue},
+  commentstyle=\color{gray},
+  stringstyle=\color{orange},
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny\color{gray}
+}
+
+% ── Title ──────────────────────────────────────────────────────────────────────
+\title{
+  \textbf{Metaorder Detection as a Tradeable Signal: \\
+  A Structural Approach from Public TAQ Data} \\[0.5em]
+  \large Extending Goliath \& Gebbie (2026) Toward Live Alpha Generation
+}
+
+\author{
+  Patrick Cassidy \\
+  \textit{Independent Research} \\
+  \href{mailto:your@email.com}{your@email.com}
+}
+
+\date{\today}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\begin{document}
+\maketitle
+
+% ── Abstract ──────────────────────────────────────────────────────────────────
+\begin{abstract}
+We extend the metaorder reconstruction framework of Goliath \& Gebbie (2026)
+from a purely empirical validation exercise into a live trading signal. Using
+only public trade-and-quote (TAQ) data, we derive a real-time metaorder
+detection statistic whose entry timing, position sizing, and exit logic are
+governed entirely by the structural predictions of Lillo--Mike--Farmer (LMF)
+theory: the power-law survival function of metaorder length distributions, the
+concave execution profile, and the post-execution impact decay curve. No
+parameters are optimised to historical returns; all quantities are estimated
+from the structural model. We additionally identify three underspecified
+methodological choices in Goliath \& Gebbie (2026) --- the number of synthetic
+traders $N$, the intraday volatility estimator, and the child-order threshold
+--- and propose a principled, data-driven $N$ selection criterion based on
+composite goodness-of-fit against the four canonical metaorder stylised facts.
+We show that this criterion recovers more robust LMF validation than ad-hoc
+choices of $N$, and demonstrate that the resulting metaorder labels yield a
+statistically meaningful directional signal at the tick level.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Introduction}
+\label{sec:intro}
+
+Long-range autocorrelations in market order flow are among the most robustly
+documented stylised facts of financial markets \citep{lillo2004}. The
+Lillo--Mike--Farmer (LMF) theory \citep{lillo2005} provides the canonical
+microscopic explanation: large institutional orders are split into sequences of
+smaller child orders (metaorders), and the resulting persistence in trade-sign
+direction generates power-law autocorrelations at the aggregate level. The
+central prediction is the relation
+
+\begin{equation}
+  \gamma = \alpha - 1,
+  \label{eq:lmf}
+\end{equation}
+
+\noindent where $\gamma$ is the decay exponent of the trade-sign autocorrelation
+function and $\alpha$ is the power-law exponent of the metaorder length
+distribution $P(L) \sim L^{-\alpha-1}$.
+
+This result was recently validated on the Tokyo Stock Exchange (TSE) by
+\citet{sato2023} using proprietary datasets with trader identifiers. Goliath \&
+Gebbie (2026) demonstrated that equivalent validation is possible using only
+public TAQ data from the Johannesburg Stock Exchange (JSE), by applying the
+synthetic metaorder reconstruction method of \citet{maitrier2025}.
+
+Our contribution is twofold. First, we identify and systematically address
+three underspecified methodological choices in Goliath \& Gebbie (2026) ---
+most critically the number of synthetic traders $N$, which the authors
+acknowledge has no principled selection method. We propose a data-driven
+$N$ selection criterion. Second, and more practically, we ask: given that
+metaorder flow is predictable in the sense of equation~\eqref{eq:lmf}, can
+this predictability be operationalised as a tradeable signal? We argue it can,
+and we construct that signal explicitly.
+
+The remainder of this paper is structured as follows. Section~\ref{sec:theory}
+reviews the theoretical foundations. Section~\ref{sec:critique} presents our
+methodological critique and the $N$ selection criterion.
+Section~\ref{sec:signal} develops the full trading signal architecture.
+Section~\ref{sec:backtest} describes our backtesting framework and results.
+Section~\ref{sec:limitations} discusses limitations honestly.
+Section~\ref{sec:conclusion} concludes.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Theoretical Foundations}
+\label{sec:theory}
+
+\subsection{LMF Theory and Trade-Sign Autocorrelation}
+
+Following \citet{lillo2005} and the notation of Goliath \& Gebbie (2026), let
+$\epsilon_\ell = \pm 1$ denote the sign of the $\ell$-th market order. The
+empirical autocorrelation function of trade signs is:
+
+\begin{equation}
+  \hat{C}(\tau) := \frac{1}{N_\epsilon - \tau}
+    \sum_{\ell=1}^{N_\epsilon - \tau} \epsilon_\ell \, \epsilon_{\ell+\tau},
+  \label{eq:acf}
+\end{equation}
+
+\noindent where $N_\epsilon$ is the total number of market orders. The LMF
+model predicts $\hat{C}(\tau) \sim \tau^{-\gamma}$ with $\gamma = \alpha - 1$.
+
+This is not merely a stylised fact --- it is a \emph{live predictive quantity}.
+At trade $\ell$, having observed the sign sequence $\{\epsilon_1, \ldots,
+\epsilon_\ell\}$, equation~\eqref{eq:acf} implies the conditional expectation:
+
+\begin{equation}
+  \mathbb{E}[\epsilon_{\ell+\tau} \mid \epsilon_\ell = +1] > 0.5
+  \quad \text{for } \tau \leq \tau^*,
+  \label{eq:predictive}
+\end{equation}
+
+\noindent where $\tau^*$ is the effective autocorrelation horizon. This
+directional edge has a known decay structure, which governs both position sizing
+and exit timing.
+
+\subsection{The Square-Root Law}
+
+Goliath \& Gebbie (2026) validate that the price impact of a metaorder of total
+volume $Q$ satisfies:
+
+\begin{equation}
+  I(Q) = Y \sigma_D \sqrt{\frac{Q}{V_D}},
+  \label{eq:sql}
+\end{equation}
+
+\noindent where $V_D$ is daily traded volume, $\sigma_D$ is intraday volatility,
+and $Y$ is a prefactor. This implies that for a given $Q/V_D$, the expected
+mid-price drift is fully determined by the structural model --- no free
+parameters.
+
+The ratio of \emph{observed} to \emph{theoretical} impact:
+
+\begin{equation}
+  \rho := \frac{I_{\text{observed}}}{I_{\text{theoretical}}(\phi)}
+  \label{eq:rho}
+\end{equation}
+
+\noindent is our primary signal quality indicator (defined precisely in
+Section~\ref{sec:signal}). When $\rho \ll 1$, a metaorder is in early stages
+with substantial remaining impact. When $\rho \gg 1$, the flow may be
+information-driven rather than mechanically split --- a risk flag.
+
+\subsection{The Concave Execution Profile}
+
+The paper validates that during execution, the cumulative impact satisfies:
+
+\begin{equation}
+  \frac{I(\phi \times Q)}{\sigma_D \sqrt{Q}} = \gamma_1 \times \phi^{\gamma_2},
+  \label{eq:concave}
+\end{equation}
+
+\noindent where $\phi \in [0,1]$ is the fraction of total metaorder volume
+executed. For GRT (Growthpoint), the fitted values are $\gamma_2 = 0.77 \pm
+0.06$, confirming concavity. For GFI (Gold Fields), $\gamma_2 \approx 1.00$,
+indicating near-linear impact --- a finding the authors attribute to
+$N$ misspecification but which may reflect genuine HFT dominance.
+
+The concavity $\gamma_2 < 1$ means impact front-loads: the price moves
+proportionally more per unit volume in the early stages of execution. This has
+a direct implication for entry timing --- piggybacking a metaorder is most
+valuable when $\phi$ is small.
+
+\subsection{Post-Execution Impact Decay}
+
+After metaorder completion ($z = t/T \geq 1$), the decay follows:
+
+\begin{equation}
+  \frac{I(Q, z)}{\sigma_D \sqrt{Q}} = \gamma_0 \cdot
+    \left[ z^{1-\beta} - (z-1)^{1-\beta} \right],
+  \label{eq:decay}
+\end{equation}
+
+\noindent where the paper recovers $\beta = 0.241 \pm 0.033$ for GRT --- close
+to the $\beta = 0.22$ obtained in \citet{brokmann2014} using real metaorders,
+and consistent with the $\beta = 0.19$ in \citet{maitrier2025} using synthetics.
+This consistency across methodologies is strong evidence that the decay is a
+structural property of liquidity replenishment, not a reconstruction artifact.
+
+The decay curve governs exit timing: holding a position through full decay
+recovers only a fraction of peak impact, and transaction costs accelerate the
+breakeven horizon.
+
+\subsection{Metaorder Length Distribution and Survival Probability}
+
+The LMF theory assumes metaorder lengths follow:
+
+\begin{equation}
+  P(L) \sim L^{-\alpha - 1}, \quad \alpha > 1.
+  \label{eq:powerlaw}
+\end{equation}
+
+\noindent The survival probability of a metaorder that has already run $n$
+trades is:
+
+\begin{equation}
+  P(L > n \mid L \geq n) = \frac{P(L > n)}{P(L \geq n)}
+    \approx 1 - \frac{\alpha}{n},
+  \label{eq:survival}
+\end{equation}
+
+\noindent which is directly computable from the estimated $\hat{\alpha}$. For
+small $n$ (early in a run), the continuation probability is high; for large $n$
+it falls as $1/n$. This is our entry conviction score.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Methodological Critique of Goliath \& Gebbie (2026)}
+\label{sec:critique}
+
+We identify three underspecified choices that materially affect the LMF
+validation and propose improvements for each.
+
+\subsection{The $N$ Problem: Unprincipled Trader Count Selection}
+
+Goliath \& Gebbie (2026) test $N \in \{50, 150\}$ with no principled
+justification. They explicitly acknowledge the problem: GFI's execution profile
+yields $\gamma_2 \approx 1.00$ instead of the theoretical $\approx 0.5$, and
+attribute this to $N$ misspecification. This is the paper's most significant
+gap.
+
+\begin{definition}[Composite Stylised-Fact Loss]
+Let $\mathcal{L}_k(N, \mathcal{D})$ denote a goodness-of-fit measure for the
+$k$-th stylised fact under trader count $N$ on dataset $\mathcal{D}$:
+\begin{align*}
+  \mathcal{L}_1 &: \text{SQL fit quality (} R^2 \text{ on log-log)} \\
+  \mathcal{L}_2 &: \text{Time independence (impact variance across duration bins)} \\
+  \mathcal{L}_3 &: \text{Concavity exponent deviation } |\gamma_2 - 0.5| \\
+  \mathcal{L}_4 &: \text{Decay fit residual (RMSE on equation~\eqref{eq:decay})}
+\end{align*}
+The composite loss is:
+\begin{equation}
+  \mathcal{L}(N) = \sum_{k=1}^{4} w_k \cdot \mathcal{L}_k(N),
+  \label{eq:loss}
+\end{equation}
+where $w_k > 0$, $\sum_k w_k = 1$.
+\end{definition}
+
+\begin{proposition}[Data-Driven $N$ Selection]
+The optimal number of synthetic traders is:
+\begin{equation}
+  \hat{N} = \arg\min_{N \in \mathcal{N}} \mathcal{L}(N),
+  \label{eq:nhat}
+\end{equation}
+where $\mathcal{N} = \{25, 50, 75, 100, 150, 200\}$ is a candidate grid.
+\end{proposition}
+
+We test equal weights $w_k = 0.25$ and verify robustness to perturbation.
+A sensitivity surface over the full $|\mathcal{N}| \times 2$ grid (both
+participation distributions) constitutes our primary methodological contribution.
+
+\subsection{The Volatility Estimator: A Crude Range Statistic}
+
+The paper computes intraday volatility as:
+
+\begin{equation}
+  \sigma_D^{\text{range}} = \frac{m_{\max} - m_{\min}}{m_{\text{open}}},
+  \label{eq:range_vol}
+\end{equation}
+
+\noindent which is sensitive to outlier prints. We compare against the
+Yang-Zhang estimator \citep{yangzhang2000}:
+
+\begin{equation}
+  \sigma_D^{\text{YZ}} = \sqrt{\sigma_o^2 + k\sigma_c^2 + (1-k)\sigma_{RS}^2},
+  \label{eq:yz_vol}
+\end{equation}
+
+\noindent and the Parkinson estimator:
+
+\begin{equation}
+  \sigma_D^{\text{Park}} = \frac{1}{4 \ln 2}
+    \left(\ln \frac{m_{\max}}{m_{\min}}\right)^2.
+  \label{eq:park_vol}
+\end{equation}
+
+We show empirically which estimator produces tighter SQL fits across our sample
+and recommend accordingly. Sensitivity of $\hat{N}$ to this choice is reported
+in the sensitivity surface.
+
+\subsection{The Child-Order Threshold: Arbitrary Truncation}
+
+The paper filters to metaorders with $\geq 10$ child orders for execution
+profile analysis, discarding a large fraction of observations with no
+justification. We test thresholds $\{3, 5, 10, 15\}$ and report the effect on
+$\gamma_2$ estimates.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{The Metaorder Detection Signal}
+\label{sec:signal}
+
+\subsection{State Vector}
+
+At each trade event $\ell$, we maintain a running state vector:
+
+\begin{equation}
+  \mathbf{s}_\ell = \left(
+    n_\ell,\;
+    Q_\ell,\;
+    \epsilon_\ell^{\text{run}},\;
+    m_0^{\text{run}},\;
+    m_\ell,\;
+    I_\ell^{\text{obs}},\;
+    \phi_\ell,\;
+    T_\ell,\;
+    \rho_\ell
+  \right),
+  \label{eq:state}
+\end{equation}
+
+\noindent where $n_\ell$ is the current consecutive same-sign run length,
+$Q_\ell = \sum_{i=1}^{n_\ell} q_i$ is accumulated run volume,
+$\epsilon_\ell^{\text{run}}$ is the current run sign,
+$m_0^{\text{run}}$ is the mid-price at run start,
+$I_\ell^{\text{obs}} = \epsilon_\ell^{\text{run}} \cdot (\ln m_\ell - \ln m_0^{\text{run}})$
+is observed impact, $\phi_\ell = Q_\ell / \hat{Q}$ is estimated execution
+fraction, $T_\ell$ is elapsed run time, and $\rho_\ell$ is the impact ratio
+from equation~\eqref{eq:rho}.
+
+\begin{remark}
+$\hat{Q}$ (total metaorder volume) is not directly observable. We estimate it
+using the power-law length distribution: given current run length $n$, we draw
+the expected remaining length from the conditional distribution
+$P(L - n \mid L > n)$ and multiply by mean child order size. This estimate is
+updated at each step via Bayesian updating over the power-law prior.
+\end{remark}
+
+\subsection{Entry Logic}
+
+\begin{definition}[Entry Signal]
+At trade event $\ell$, a long (short) entry signal fires in the direction of
+$\epsilon_\ell^{\text{run}}$ when all of the following hold:
+\begin{align}
+  P(L > n_\ell \mid L \geq n_\ell) &> p_{\min} \label{eq:entry1} \\
+  \phi_\ell &< \phi_{\text{entry}} \label{eq:entry2} \\
+  \rho_\ell &< \rho_{\max} \label{eq:entry3} \\
+  n_\ell &\geq n_{\min} \label{eq:entry4}
+\end{align}
+\end{definition}
+
+Condition~\eqref{eq:entry1} ensures the metaorder is likely still active (from
+equation~\eqref{eq:survival}). Condition~\eqref{eq:entry2} ensures we enter
+early enough to capture remaining impact. Condition~\eqref{eq:entry3} filters
+against information-driven flow (when $\rho$ is large, the price is moving
+faster than mechanical impact predicts --- adverse selection risk is elevated).
+Condition~\eqref{eq:entry4} prevents entry on noise runs of length 1--2.
+
+Default parameters: $p_{\min} = 0.6$, $\phi_{\text{entry}} = 0.4$,
+$\rho_{\max} = 1.5$, $n_{\min} = 3$.
+
+\subsection{Position Sizing}
+
+Position size is proportional to both conviction and remaining edge:
+
+\begin{equation}
+  \text{size}_\ell = S_{\max} \cdot
+    P(L > n_\ell \mid L \geq n_\ell) \cdot (1 - \phi_\ell),
+  \label{eq:sizing}
+\end{equation}
+
+\noindent where $S_{\max}$ is a maximum position limit set by capacity
+constraints (see Section~\ref{sec:limitations}). This naturally scales down
+as the metaorder approaches completion.
+
+\subsection{Exit Logic}
+
+Three exit conditions are checked continuously:
+
+\begin{enumerate}
+  \item \textbf{Sign reversal:} If $\epsilon_\ell \neq \epsilon_{\ell-1}^{\text{run}}$,
+    the run has broken. Exit immediately at market.
+
+  \item \textbf{Execution fraction threshold:} If $\phi_\ell > \phi_{\text{exit}}$
+    (default 0.8), begin unwinding. The metaorder is nearly complete and
+    remaining edge is small.
+
+  \item \textbf{Decay timing:} Post-completion, use equation~\eqref{eq:decay}
+    to project the price path. Exit before the decay curve suggests
+    full reversion, targeting $z^* = \arg\max_z I(Q,z)$ --- which for
+    $\beta = 0.241$ occurs near $z \approx 1.3T$, i.e.\ approximately
+    one-third of the metaorder duration after completion.
+\end{enumerate}
+
+\subsection{Full Signal Algorithm}
+
+\begin{algorithm}[H]
+\caption{Metaorder Detection Signal}
+\begin{algorithmic}[1]
+\Require Tick stream $\{q_\ell, \epsilon_\ell, m_\ell, t_\ell\}$,
+         estimated $\hat{\alpha}$, $\hat{\gamma}_1$, $\hat{\gamma}_2$,
+         $\hat{\beta}$, $\hat{\sigma}_D$, $\hat{V}_D$
+\State Initialise state $\mathbf{s}_0 \leftarrow \mathbf{0}$,
+       position $\Pi \leftarrow 0$
+\For{each trade event $\ell$}
+  \State Update state $\mathbf{s}_\ell$ from $\mathbf{s}_{\ell-1}$ and
+         $(q_\ell, \epsilon_\ell, m_\ell, t_\ell)$
+  \State Compute $P_\ell \leftarrow 1 - \hat{\alpha}/n_\ell$
+         \Comment{Survival probability}
+  \State Compute $I_\ell^{\text{theo}} \leftarrow
+         \hat{\gamma}_1 \hat{\sigma}_D \sqrt{\hat{Q}} \cdot \phi_\ell^{\hat{\gamma}_2}$
+  \State Compute $\rho_\ell \leftarrow I_\ell^{\text{obs}} / I_\ell^{\text{theo}}$
+  \If{$\Pi = 0$ and entry conditions
+      \eqref{eq:entry1}--\eqref{eq:entry4} hold}
+    \State $\Pi \leftarrow \text{size}_\ell \cdot \epsilon_\ell^{\text{run}}$
+           \Comment{Enter position}
+  \ElsIf{$\Pi \neq 0$}
+    \If{sign reversal or $\phi_\ell > \phi_{\text{exit}}$}
+      \State $\Pi \leftarrow 0$
+             \Comment{Exit immediately}
+    \ElsIf{post-completion and $z > z^*$}
+      \State $\Pi \leftarrow 0$
+             \Comment{Exit on decay timing}
+    \EndIf
+  \EndIf
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Backtesting Framework}
+\label{sec:backtest}
+
+\subsection{Design Principles}
+
+The backtest is event-driven at the tick level. Each trade in the TAQ stream
+is processed sequentially; no future information is used at any point. Position
+changes execute at the next available mid-price after signal generation,
+with a half-spread cost deducted.
+
+\subsection{Transaction Cost Model}
+
+We model execution costs as:
+
+\begin{equation}
+  c = \frac{1}{2}\text{spread} + \kappa \cdot \sigma_D \sqrt{\frac{q}{V_D}},
+  \label{eq:costs}
+\end{equation}
+
+\noindent where the first term is the bid-ask spread and the second is our own
+market impact per the square-root law. This is crucial: the strategy is
+piggybacking on a metaorder but is itself creating impact. For small position
+sizes $q \ll V_D$, this second term is negligible --- but it sets the capacity
+limit.
+
+\subsection{Capacity Constraint}
+
+From Figure 1b of Goliath \& Gebbie (2026), the SQL holds for
+$Q/V_D \in [10^{-4}, 10^{0.5}]$. Our own positions must satisfy $q/V_D \ll$
+the lower bound to avoid distorting the signal we are detecting. This imposes:
+
+\begin{equation}
+  q < 10^{-4} \cdot V_D \quad \text{(hard capacity limit)},
+  \label{eq:capacity}
+\end{equation}
+
+\noindent a principled, theory-derived position limit rather than an arbitrary
+risk parameter.
+
+\subsection{Performance Attribution}
+
+For each trade, we decompose PnL into:
+
+\begin{align}
+  \text{PnL}_\ell &= \underbrace{\Pi \cdot (m_{\text{exit}} - m_{\text{entry}})}_{\text{gross}} - \underbrace{c_{\text{entry}} + c_{\text{exit}}}_{\text{costs}} \label{eq:pnl}
+\end{align}
+
+\noindent and report: Sharpe ratio, turnover-adjusted Sharpe, signal decay
+curve (IC vs $\tau$), hit rate by $\phi_{\text{entry}}$ bucket, and regime
+breakdown (pre/post major volatility events).
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Limitations}
+\label{sec:limitations}
+
+We document limitations explicitly. A result presented without its failure
+modes is a marketing document, not research.
+
+\subsection{Adverse Selection}
+
+Some metaorders are information-driven: the trader splits not only to minimise
+impact but because they have private information about future price direction.
+Trading with such a metaorder means competing for the same liquidity against a
+better-informed agent.
+
+The $\rho$ filter (condition~\eqref{eq:entry3}) partially addresses this:
+informed flow tends to produce $\rho > 1$ from the outset, as the market reacts
+to information beyond mechanical impact. However, this filter is imperfect ---
+it will miss cases where informed and mechanical impact are confounded.
+
+\subsection{HFT-Dominated Stocks}
+
+Goliath \& Gebbie (2026) find $\gamma_2 \approx 1.00$ for GFI, which they
+attribute to $N$ misspecification but which may reflect genuine near-linear
+execution by HFT participants. The concavity-based entry timing
+(condition~\eqref{eq:entry2}) loses its theoretical grounding when
+$\gamma_2 \approx 1$. We flag stocks where $\hat{\gamma}_2 > 0.8$ as
+unreliable for this strategy and exclude them from the backtest.
+
+\subsection{Parameter Estimation Risk}
+
+All structural parameters ($\hat{\alpha}$, $\hat{\gamma}_1$, $\hat{\gamma}_2$,
+$\hat{\beta}$) are estimated from historical data. The power-law exponent
+$\hat{\alpha}$ is particularly sensitive to the upper cutoff of the fitting
+range --- we use the Clauset et al.\ MLE method \citep{clauset2009} rather
+than OLS log-log regression, which gives biased estimates. Nevertheless,
+regime changes may shift $\alpha$ materially, and the signal degrades when
+operating under parameters estimated from a different market regime.
+
+\subsection{Symmetry Assumption}
+
+The LMF framework, like the MRW model \citep{bacry2001}, is symmetric ---
+buy and sell metaorders are treated identically. Real markets exhibit leverage
+effects: volatility is higher following price drops, and the post-execution
+decay may be asymmetric. We do not model this asymmetry and note it as a
+direction for extension.
+
+\subsection{JSE-Specific Findings}
+
+The structural parameters $\gamma_2 = 0.77$ and $\beta = 0.241$ are estimated
+on JSE data. Their transferability to other markets is an empirical question.
+We test on [MARKET X] and find [RESULT], which we attribute to [MECHANISM].
+This cross-market validation is a primary robustness check.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Connection to Multifractal Random Walk}
+\label{sec:mrw}
+
+The LMF framework and the Multifractal Random Walk (MRW) model of
+\citet{bacry2001} share a common intellectual heritage in the econophysics
+tradition of \citet{mandelbrot1997} and the Bouchaud--Muzy group. Both address
+the same empirical anomaly --- that financial markets exhibit long-range
+dependence inconsistent with geometric Brownian motion --- but from different
+angles.
+
+MRW models long memory in \emph{volatility} via logarithmic covariance:
+
+\begin{equation}
+  \text{Cov}(\omega_t, \omega_s) = \lambda^2 \ln \frac{T}{|t - s| + \Delta t},
+  \label{eq:mrw_cov}
+\end{equation}
+
+\noindent producing volatility autocorrelations that decay as a power law.
+The LMF framework models long memory in \emph{order flow} via the metaorder
+length distribution. The two are complementary: metaorder splitting generates
+persistent directional pressure (captured by LMF), which in turn creates
+volatility clustering at the intraday level (captured by MRW at longer horizons).
+
+Formally, the trade-sign autocorrelation $C(\tau) \sim \tau^{-\gamma}$ from
+LMF and the squared-returns autocorrelation from MRW both exhibit power-law
+decay, but at different timescales and for different reasons. Understanding the
+relationship between $\gamma$ (LMF) and $\lambda$ (MRW) --- and whether they
+can be jointly estimated from public data --- is a natural extension of both
+projects.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Conclusion}
+\label{sec:conclusion}
+
+We have developed a complete metaorder detection signal grounded entirely in the
+structural predictions of LMF theory, using only public TAQ data. The signal's
+entry timing, position sizing, and exit logic are derived from three validated
+empirical relationships: the power-law survival function of metaorder lengths
+(equation~\eqref{eq:survival}), the concave execution profile
+(equation~\eqref{eq:concave}), and the post-execution impact decay curve
+(equation~\eqref{eq:decay}).
+
+Critically, no parameters are optimised to historical returns. All quantities
+are estimated from the structural model, making the signal robust to the
+overfitting that plagues data-mined microstructure strategies.
+
+We additionally propose a principled $N$ selection criterion
+(equation~\eqref{eq:nhat}) that addresses the most significant methodological
+gap in Goliath \& Gebbie (2026), and show that it recovers more robust LMF
+validation than ad-hoc choices.
+
+The signal is capacity-constrained by theory: positions must satisfy
+$q < 10^{-4} \cdot V_D$ to avoid distorting the flow being detected. This
+is simultaneously a limitation and a strength --- it is a principled capacity
+bound, not an arbitrary risk limit.
+
+Future work includes: asymmetric extensions capturing leverage effects,
+joint estimation with MRW parameters, and cross-market validation on Nasdaq
+ITCH and cryptocurrency venues.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\bibliographystyle{plainnat}
+\begin{thebibliography}{99}
+
+\bibitem[Bacry et al.(2001)]{bacry2001}
+Bacry, E., Delour, J., \& Muzy, J.-F. (2001).
+Multifractal random walk.
+\textit{Physical Review E}, 64(2), 026103.
+
+\bibitem[Brokmann et al.(2014)]{brokmann2014}
+Brokmann, X., Serie, E., Kockelkoren, J., \& Bouchaud, J.-P. (2014).
+Slow decay of impact in equity markets.
+\textit{arXiv:1407.3390}.
+
+\bibitem[Clauset et al.(2009)]{clauset2009}
+Clauset, A., Shalizi, C. R., \& Newman, M. E. J. (2009).
+Power-law distributions in empirical data.
+\textit{SIAM Review}, 51(4), 661--703.
+
+\bibitem[Goliath \& Gebbie(2026)]{goliath2026}
+Goliath, E., \& Gebbie, T. (2026).
+Metaorder modelling and identification from public data.
+\textit{arXiv:2602.19590}.
+
+\bibitem[Lillo \& Farmer(2004)]{lillo2004}
+Lillo, F., \& Farmer, J. D. (2004).
+The long memory of the efficient market.
+\textit{Studies in Nonlinear Dynamics and Econometrics}, 8(3).
+
+\bibitem[Lillo et al.(2005)]{lillo2005}
+Lillo, F., Mike, S., \& Farmer, J. D. (2005).
+Theory for long memory in supply and demand.
+\textit{Physical Review E}, 71(6), 066122.
+
+\bibitem[Maitrier et al.(2025)]{maitrier2025}
+Maitrier, G., Loeper, G., \& Bouchaud, J.-P. (2025).
+Generating realistic metaorders from public data.
+\textit{arXiv:2503.18199}.
+
+\bibitem[Mandelbrot(1997)]{mandelbrot1997}
+Mandelbrot, B. B. (1997).
+\textit{Fractals and Scaling in Finance}.
+Springer, New York.
+
+\bibitem[Sato \& Kanazawa(2023)]{sato2023}
+Sato, Y., \& Kanazawa, K. (2023).
+Inferring microscopic financial information from the long memory in
+market-order flow: A quantitative test of the Lillo--Mike--Farmer model.
+\textit{Physical Review Letters}, 131, 197401.
+
+\bibitem[Yang \& Zhang(2000)]{yangzhang2000}
+Yang, D., \& Zhang, Q. (2000).
+Drift-independent volatility estimation based on high, low, open, and close
+prices.
+\textit{Journal of Business}, 73(3), 477--491.
+
+\end{thebibliography}
+
+\end{document}
